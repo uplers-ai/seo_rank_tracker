@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UPLERS SEO Rank Tracker</title>
+<style>
+  :root {
+    --bg: #080c10;
+    --bg2: #0d1117;
+    --bg3: #111820;
+    --green: #00ff88;
+    --green-dim: #00cc6a;
+    --green-muted: rgba(0,255,136,0.08);
+    --amber: #ffb800;
+    --blue: #00aaff;
+    --red: #ff4466;
+    --text: #c9d4e0;
+    --text-dim: #5a6a7a;
+    --border: rgba(0,255,136,0.15);
+    --border-dim: rgba(255,255,255,0.06);
+    --font-mono: 'Courier New', 'Lucida Console', monospace;
+    --font-sans: Georgia, 'Times New Roman', serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 14px;
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+
+  /* Scanline overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.08) 2px,
+      rgba(0,0,0,0.08) 4px
+    );
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  /* Noise texture */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 9998;
+    opacity: 0.4;
+  }
+
+  /* ── HEADER ── */
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(8,12,16,0.92);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 52px;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+    letter-spacing: 0.15em;
+    color: var(--green);
+    text-transform: uppercase;
+  }
+
+  .logo-icon {
+    width: 28px;
+    height: 28px;
+    border: 1.5px solid var(--green);
+    display: grid;
+    place-items: center;
+    font-size: 14px;
+    animation: pulse-border 3s ease-in-out infinite;
+  }
+
+  @keyframes pulse-border {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(0,255,136,0.4); }
+    50% { box-shadow: 0 0 0 6px rgba(0,255,136,0); }
+  }
+
+  .nav-links {
+    display: flex;
+    gap: 2rem;
+    list-style: none;
+  }
+
+  .nav-links a {
+    color: var(--text-dim);
+    text-decoration: none;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    transition: color 0.2s;
+  }
+
+  .nav-links a:hover { color: var(--green); }
+
+  .status-pill {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    color: var(--green);
+    letter-spacing: 0.1em;
+  }
+
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    background: var(--green);
+    border-radius: 50%;
+    animation: blink 1.4s step-end infinite;
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+  }
+
+  /* ── HERO ── */
+  .hero {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 6rem 2rem 4rem;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .hero-grid-bg {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,255,136,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,255,136,0.04) 1px, transparent 1px);
+    background-size: 48px 48px;
+    mask-image: radial-gradient(ellipse 80% 60% at 50% 50%, black, transparent);
+  }
+
+  .hero-glow {
+    position: absolute;
+    top: 20%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 600px;
+    height: 300px;
+    background: radial-gradient(ellipse, rgba(0,255,136,0.06) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .hero-inner {
+    max-width: 900px;
+    margin: 0 auto;
+    width: 100%;
+    position: relative;
+    z-index: 1;
+  }
+
+  .hero-eyebrow {
+    font-size: 10px;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--green);
+    margin-bottom: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .hero-eyebrow::before {
+    content: '';
+    display: block;
+    width: 40px;
+    height: 1px;
+    background: var(--green);
+  }
+
+  .hero-title {
+    font-family: var(--font-mono);
+    font-size: clamp(2.2rem, 6vw, 5rem);
+    font-weight: normal;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    color: #fff;
+    margin-bottom: 0.5rem;
+  }
+
+  .hero-title .accent { color: var(--green); }
+
+  .hero-subtitle {
+    font-size: clamp(1rem, 2vw, 1.4rem);
+    color: var(--text-dim);
+    margin-bottom: 3rem;
+    font-family: var(--font-sans);
+    font-style: italic;
+    font-weight: normal;
+  }
+
+  .terminal-prompt {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    padding: 1.5rem;
+    font-size: 13px;
+    margin-bottom: 3rem;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .terminal-prompt::before {
+    content: 'SYSTEM OUTPUT';
+    position: absolute;
+    top: -1px;
+    left: 1.5rem;
+    background: var(--bg);
+    padding: 0 8px;
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    color: var(--text-dim);
+  }
+
+  .terminal-line {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 4px;
+  }
+
+  .t-prompt { color: var(--green); }
+  .t-cmd { color: #fff; }
+  .t-comment { color: var(--text-dim); }
+  .t-output { color: var(--amber); padding-left: 2rem; }
+  .t-success { color: var(--green); padding-left: 2rem; }
+
+  .cursor {
+    display: inline-block;
+    width: 8px;
+    height: 14px;
+    background: var(--green);
+    vertical-align: middle;
+    animation: cursor-blink 1s step-end infinite;
+  }
+
+  @keyframes cursor-blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+  }
+
+  .hero-cta {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .btn {
+    padding: 0.75rem 1.75rem;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    cursor: pointer;
+    text-decoration: none;
+    transition: all 0.2s;
+    border: none;
+  }
+
+  .btn-primary {
+    background: var(--green);
+    color: #000;
+    font-weight: bold;
+  }
+
+  .btn-primary:hover {
+    background: #fff;
+    box-shadow: 0 0 30px rgba(0,255,136,0.4);
+    transform: translateY(-2px);
+  }
+
+  .btn-secondary {
+    background: transparent;
+    color: var(--green);
+    border: 1px solid var(--border);
+  }
+
+  .btn-secondary:hover {
+    background: var(--green-muted);
+    border-color: var(--green);
+  }
+
+  /* ── STATS ── */
+  .stats-section {
+    padding: 4rem 2rem;
+    border-top: 1px solid var(--border-dim);
+    border-bottom: 1px solid var(--border-dim);
+    background: var(--bg2);
+  }
+
+  .stats-grid {
+    max-width: 900px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0;
+  }
+
+  .stat-item {
+    padding: 2rem;
+    border-right: 1px solid var(--border-dim);
+    text-align: center;
+    position: relative;
+  }
+
+  .stat-item:last-child { border-right: none; }
+
+  .stat-value {
+    font-size: clamp(2.5rem, 5vw, 4rem);
+    color: var(--green);
+    font-weight: normal;
+    letter-spacing: -0.02em;
+    line-height: 1;
+    margin-bottom: 0.5rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .stat-suffix {
+    font-size: 1.5rem;
+    color: var(--green-dim);
+  }
+
+  .stat-label {
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+
+  .stat-bar {
+    margin-top: 1rem;
+    height: 2px;
+    background: var(--border-dim);
+    overflow: hidden;
+  }
+
+  .stat-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--green), var(--blue));
+    width: 0%;
+    transition: width 2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* ── FEATURES ── */
+  .features-section {
+    padding: 5rem 2rem;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  .section-header {
+    margin-bottom: 3rem;
+  }
+
+  .section-tag {
+    font-size: 10px;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--green);
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .section-tag::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border-dim);
+    max-width: 200px;
+  }
+
+  .section-title {
+    font-size: clamp(1.5rem, 3vw, 2.2rem);
+    font-family: var(--font-sans);
+    font-weight: normal;
+    font-style: italic;
+    color: #fff;
+  }
+
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1px;
+    background: var(--border-dim);
+    border: 1px solid var(--border-dim);
+  }
+
+  .feature-card {
+    background: var(--bg);
+    padding: 2rem;
+    transition: background 0.3s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .feature-card:hover { background: var(--bg3); }
+
+  .feature-card::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--green), transparent);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.3s;
+  }
+
+  .feature-card:hover::after { transform: scaleX(1); }
+
+  .feature-icon {
+    width: 40px;
+    height: 40px;
+    border: 1px solid var(--border);
+    display: grid;
+    place-items: center;
+    font-size: 18px;
+    margin-bottom: 1.25rem;
+    background: var(--green-muted);
+  }
+
+  .feature-name {
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #fff;
+    margin-bottom: 0.75rem;
+  }
+
+  .feature-desc {
+    font-size: 12px;
+    color: var(--text-dim);
+    line-height: 1.7;
+    font-family: var(--font-sans);
+    font-style: italic;
+  }
+
+  .feature-tag {
+    display: inline-block;
+    margin-top: 1rem;
+    font-size: 9px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--green);
+    border: 1px solid rgba(0,255,136,0.3);
+    padding: 2px 8px;
+  }
+
+  /* ── SETUP ── */
+  .setup-section {
+    padding: 5rem 2rem;
+    background: var(--bg2);
+    border-top: 1px solid var(--border-dim);
+  }
+
+  .setup-inner {
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  .steps-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    border: 1px solid var(--border-dim);
+    margin-top: 2.5rem;
+  }
+
+  .step {
+    display: grid;
+    grid-template-columns: 80px 1fr;
+    border-bottom: 1px solid var(--border-dim);
+  }
+
+  .step:last-child { border-bottom: none; }
+
+  .step-num {
+    border-right: 1px solid var(--border-dim);
+    display: grid;
+    place-items: center;
+    font-size: 2rem;
+    color: var(--border);
+    font-variant-numeric: tabular-nums;
+    background: var(--bg);
+    padding: 1.5rem;
+  }
+
+  .step-content {
+    padding: 1.5rem 2rem;
+    background: var(--bg);
+    transition: background 0.2s;
+  }
+
+  .step:hover .step-content { background: var(--bg3); }
+  .step:hover .step-num { color: var(--green); }
+
+  .step-title {
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #fff;
+    margin-bottom: 0.5rem;
+  }
+
+  .step-desc {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-bottom: 0.75rem;
+    font-family: var(--font-sans);
+    font-style: italic;
+  }
+
+  .code-block {
+    background: #000;
+    border: 1px solid var(--border-dim);
+    padding: 0.75rem 1rem;
+    font-size: 11px;
+    color: var(--green);
+    overflow-x: auto;
+    position: relative;
+  }
+
+  .code-block .comment { color: var(--text-dim); }
+  .code-block .str { color: var(--amber); }
+  .code-block .kw { color: var(--blue); }
+
+  /* ── FOOTER ── */
+  footer {
+    border-top: 1px solid var(--border-dim);
+    padding: 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    color: var(--text-dim);
+  }
+
+  .footer-logo { color: var(--green); }
+
+  .footer-meta {
+    display: flex;
+    gap: 2rem;
+  }
+
+  /* ── ANIMATIONS ── */
+  .fade-up {
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+
+  .fade-up.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .fade-up:nth-child(2) { transition-delay: 0.1s; }
+  .fade-up:nth-child(3) { transition-delay: 0.2s; }
+  .fade-up:nth-child(4) { transition-delay: 0.3s; }
+
+  /* ── TICKER ── */
+  .ticker {
+    background: rgba(0,255,136,0.05);
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    padding: 8px 0;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  .ticker-inner {
+    display: inline-flex;
+    gap: 4rem;
+    animation: ticker-scroll 30s linear infinite;
+  }
+
+  .ticker-item {
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+
+  .ticker-item span { color: var(--green); margin-right: 0.5rem; }
+
+  @keyframes ticker-scroll {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+
+  @media (max-width: 640px) {
+    .stats-grid { grid-template-columns: 1fr; }
+    .stat-item { border-right: none; border-bottom: 1px solid var(--border-dim); }
+    .features-grid { grid-template-columns: 1fr; }
+    .step { grid-template-columns: 50px 1fr; }
+    .nav-links { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── HEADER ── -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">◈</div>
+    UPLERS / SEO-RT
+  </div>
+  <ul class="nav-links">
+    <li><a href="#features">Features</a></li>
+    <li><a href="#stats">Stats</a></li>
+    <li><a href="#setup">Setup</a></li>
+  </ul>
+  <div class="status-pill">
+    <div class="status-dot"></div>
+    SYSTEM ACTIVE
+  </div>
+</header>
+
+<!-- ── TICKER ── -->
+<div class="ticker">
+  <div class="ticker-inner">
+    <span class="ticker-item"><span>◆</span> SerpAPI Integration</span>
+    <span class="ticker-item"><span>◆</span> Google Sheets Read/Write</span>
+    <span class="ticker-item"><span>◆</span> 1,200+ Keywords Tracked</span>
+    <span class="ticker-item"><span>◆</span> Resume Support</span>
+    <span class="ticker-item"><span>◆</span> Rate Limit Handling</span>
+    <span class="ticker-item"><span>◆</span> Real-Time Ranking Data</span>
+    <span class="ticker-item"><span>◆</span> Batch Processing</span>
+    <span class="ticker-item"><span>◆</span> Python 3 — Zero Bloat</span>
+    <!-- repeat for seamless loop -->
+    <span class="ticker-item"><span>◆</span> SerpAPI Integration</span>
+    <span class="ticker-item"><span>◆</span> Google Sheets Read/Write</span>
+    <span class="ticker-item"><span>◆</span> 1,200+ Keywords Tracked</span>
+    <span class="ticker-item"><span>◆</span> Resume Support</span>
+    <span class="ticker-item"><span>◆</span> Rate Limit Handling</span>
+    <span class="ticker-item"><span>◆</span> Real-Time Ranking Data</span>
+    <span class="ticker-item"><span>◆</span> Batch Processing</span>
+    <span class="ticker-item"><span>◆</span> Python 3 — Zero Bloat</span>
+  </div>
+</div>
+
+<!-- ── HERO ── -->
+<section class="hero">
+  <div class="hero-grid-bg"></div>
+  <div class="hero-glow"></div>
+  <div class="hero-inner">
+    <div class="hero-eyebrow fade-up">UPLERS · PYTHON EDITION · v2.0</div>
+    <h1 class="hero-title fade-up">
+      SEO Rank<br><span class="accent">Tracker_</span>
+    </h1>
+    <p class="hero-subtitle fade-up">
+      Fetch Google rankings for 1,200+ keywords.<br>Write results directly to your Google Sheet.
+    </p>
+    <div class="terminal-prompt fade-up">
+      <div class="terminal-line">
+        <span class="t-prompt">$</span>
+        <span class="t-cmd">python3 seo_rank_tracker.py</span>
+        <span class="t-comment"># kick it off</span>
+      </div>
+      <div class="terminal-line">
+        <span class="t-output">→ Loading keywords from Google Sheet... [1,247 found]</span>
+      </div>
+      <div class="terminal-line">
+        <span class="t-output">→ Resuming from row 342 (last checkpoint)</span>
+      </div>
+      <div class="terminal-line">
+        <span class="t-success">✓ Fetching rankings via SerpAPI...</span>
+      </div>
+      <div class="terminal-line">
+        <span class="t-success">✓ Writing results to Sheet... [342–400 done]</span>
+      </div>
+      <div class="terminal-line">
+        <span class="t-prompt">$</span>
+        <span class="cursor"></span>
+      </div>
+    </div>
+    <div class="hero-cta fade-up">
+      <a href="#setup" class="btn btn-primary">Get Started</a>
+      <a href="#features" class="btn btn-secondary">View Features</a>
+    </div>
+  </div>
+</section>
+
+<!-- ── STATS ── -->
+<section class="stats-section" id="stats">
+  <div class="stats-grid">
+    <div class="stat-item fade-up">
+      <div class="stat-value"><span class="counter" data-target="1247">0</span><span class="stat-suffix">+</span></div>
+      <div class="stat-label">Keywords Tracked</div>
+      <div class="stat-bar"><div class="stat-bar-fill" data-width="92"></div></div>
+    </div>
+    <div class="stat-item fade-up">
+      <div class="stat-value"><span class="counter" data-target="98">0</span><span class="stat-suffix">%</span></div>
+      <div class="stat-label">API Success Rate</div>
+      <div class="stat-bar"><div class="stat-bar-fill" data-width="98"></div></div>
+    </div>
+    <div class="stat-item fade-up">
+      <div class="stat-value"><span class="counter" data-target="100">0</span><span class="stat-suffix">%</span></div>
+      <div class="stat-label">Sheet Sync Accuracy</div>
+      <div class="stat-bar"><div class="stat-bar-fill" data-width="100"></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ── FEATURES ── -->
+<section class="features-section" id="features">
+  <div class="section-header fade-up">
+    <div class="section-tag">Core Capabilities</div>
+    <h2 class="section-title">Everything you need to<br>own your rankings data.</h2>
+  </div>
+  <div class="features-grid">
+    <div class="feature-card fade-up">
+      <div class="feature-icon">⬡</div>
+      <div class="feature-name">Google Sheets Integration</div>
+      <p class="feature-desc">Reads keywords directly from your Sheet and writes ranking results back — no CSV juggling, no manual imports. Pure API-to-Sheet.</p>
+      <span class="feature-tag">Read + Write</span>
+    </div>
+    <div class="feature-card fade-up">
+      <div class="feature-icon">◎</div>
+      <div class="feature-name">SerpAPI Rankings</div>
+      <p class="feature-desc">Fetches live Google search positions using SerpAPI. Accurate, fast, and works for any geo or language your campaigns target.</p>
+      <span class="feature-tag">Live Data</span>
+    </div>
+    <div class="feature-card fade-up">
+      <div class="feature-icon">⟳</div>
+      <div class="feature-name">Resume Support</div>
+      <p class="feature-desc">Interrupted mid-run? No problem. The tracker picks up exactly where it left off using row-level checkpointing — not a single API call wasted.</p>
+      <span class="feature-tag">Fault Tolerant</span>
+    </div>
+    <div class="feature-card fade-up">
+      <div class="feature-icon">▤</div>
+      <div class="feature-name">1,200+ Keyword Scale</div>
+      <p class="feature-desc">Engineered for enterprise-scale keyword sets. Batch processing and smart rate-limit handling keep you comfortably within API quotas.</p>
+      <span class="feature-tag">Enterprise Scale</span>
+    </div>
+  </div>
+</section>
+
+<!-- ── SETUP ── -->
+<section class="setup-section" id="setup">
+  <div class="setup-inner">
+    <div class="section-header fade-up">
+      <div class="section-tag">Quick Setup</div>
+      <h2 class="section-title">Running in four steps.</h2>
+    </div>
+    <div class="steps-list">
+      <div class="step fade-up">
+        <div class="step-num">01</div>
+        <div class="step-content">
+          <div class="step-title">Install Dependencies</div>
+          <p class="step-desc">Install required Python packages via pip.</p>
+          <div class="code-block">pip install google-auth google-auth-oauthlib google-api-python-client serpapi</div>
+        </div>
+      </div>
+      <div class="step fade-up">
+        <div class="step-num">02</div>
+        <div class="step-content">
+          <div class="step-title">Configure Credentials</div>
+          <p class="step-desc">Add your SerpAPI key and Google Sheets credentials to the config section.</p>
+          <div class="code-block"><span class="comment"># In seo_rank_tracker.py</span>
+SERPAPI_KEY = <span class="str">"your_serpapi_key_here"</span>
+SHEET_ID    = <span class="str">"your_google_sheet_id"</span>
+CREDS_FILE  = <span class="str">"credentials.json"</span></div>
+        </div>
+      </div>
+      <div class="step fade-up">
+        <div class="step-num">03</div>
+        <div class="step-content">
+          <div class="step-title">Prepare Your Sheet</div>
+          <p class="step-desc">Ensure column A contains your keywords. The tracker reads from row 2 onward and writes rankings into adjacent columns.</p>
+          <div class="code-block"><span class="comment"># Sheet layout expected:</span>
+<span class="str">A</span>: Keyword  |  <span class="str">B</span>: Position  |  <span class="str">C</span>: URL  |  <span class="str">D</span>: Date</div>
+        </div>
+      </div>
+      <div class="step fade-up">
+        <div class="step-num">04</div>
+        <div class="step-content">
+          <div class="step-title">Run the Tracker</div>
+          <p class="step-desc">Execute the script and watch rankings flow into your Sheet in real time.</p>
+          <div class="code-block"><span class="kw">python3</span> seo_rank_tracker.py
+
+<span class="comment"># To resume an interrupted run:</span>
+<span class="comment"># Just run the same command — checkpoint is auto-detected</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── FOOTER ── -->
+<footer>
+  <div class="footer-logo">UPLERS / SEO-RANK-TRACKER</div>
+  <div class="footer-meta">
+    <span>Python 3</span>
+    <span>SerpAPI</span>
+    <span>Google Sheets API</span>
+    <span>MIT License</span>
+  </div>
+</footer>
+
+<script>
+  // ── Intersection Observer for fade-up animations
+  const fadeEls = document.querySelectorAll('.fade-up');
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        e.target.classList.add('visible');
+        observer.unobserve(e.target);
+      }
+    });
+  }, { threshold: 0.1 });
+  fadeEls.forEach(el => observer.observe(el));
+
+  // ── Counter animation
+  function animateCounter(el) {
+    const target = parseInt(el.dataset.target);
+    const duration = 2000;
+    const start = performance.now();
+    const update = (now) => {
+      const elapsed = now - start;
+      const progress = Math.min(elapsed / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      el.textContent = Math.floor(eased * target).toLocaleString();
+      if (progress < 1) requestAnimationFrame(update);
+      else el.textContent = target.toLocaleString();
+    };
+    requestAnimationFrame(update);
+  }
+
+  // ── Stat bar animation
+  function animateBar(el) {
+    const width = el.dataset.width;
+    el.style.width = width + '%';
+  }
+
+  // ── Trigger stats on scroll
+  const statsSection = document.querySelector('.stats-section');
+  let statsTriggered = false;
+  const statsObserver = new IntersectionObserver((entries) => {
+    if (entries[0].isIntersecting && !statsTriggered) {
+      statsTriggered = true;
+      document.querySelectorAll('.counter').forEach(animateCounter);
+      document.querySelectorAll('.stat-bar-fill').forEach(animateBar);
+    }
+  }, { threshold: 0.4 });
+  statsObserver.observe(statsSection);
+</script>
+</body>
+</html>
