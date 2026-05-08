@@ -655,7 +655,7 @@
 <!-- ── TICKER ── -->
 <div class="ticker">
   <div class="ticker-inner">
-    <span class="ticker-item"><span>◆</span> SerpAPI Integration</span>
+    <span class="ticker-item"><span>◆</span> ValueSERP Integration</span>
     <span class="ticker-item"><span>◆</span> Google Sheets Read/Write</span>
     <span class="ticker-item"><span>◆</span> 1,200+ Keywords Tracked</span>
     <span class="ticker-item"><span>◆</span> Resume Support</span>
@@ -664,7 +664,7 @@
     <span class="ticker-item"><span>◆</span> Batch Processing</span>
     <span class="ticker-item"><span>◆</span> Python 3 — Zero Bloat</span>
     <!-- repeat for seamless loop -->
-    <span class="ticker-item"><span>◆</span> SerpAPI Integration</span>
+    <span class="ticker-item"><span>◆</span> ValueSERP Integration</span>
     <span class="ticker-item"><span>◆</span> Google Sheets Read/Write</span>
     <span class="ticker-item"><span>◆</span> 1,200+ Keywords Tracked</span>
     <span class="ticker-item"><span>◆</span> Resume Support</span>
@@ -690,7 +690,7 @@
     <div class="terminal-prompt fade-up">
       <div class="terminal-line">
         <span class="t-prompt">$</span>
-        <span class="t-cmd">python3 seo_rank_tracker.py</span>
+        <span class="t-cmd">python3 seo_rank_tracker_valueserp.py</span>
         <span class="t-comment"># kick it off</span>
       </div>
       <div class="terminal-line">
@@ -700,7 +700,7 @@
         <span class="t-output">→ Resuming from row 342 (last checkpoint)</span>
       </div>
       <div class="terminal-line">
-        <span class="t-success">✓ Fetching rankings via SerpAPI...</span>
+        <span class="t-success">✓ Fetching rankings via ValueSERP...</span>
       </div>
       <div class="terminal-line">
         <span class="t-success">✓ Writing results to Sheet... [342–400 done]</span>
@@ -753,8 +753,8 @@
     </div>
     <div class="feature-card fade-up">
       <div class="feature-icon">◎</div>
-      <div class="feature-name">SerpAPI Rankings</div>
-      <p class="feature-desc">Fetches live Google search positions using SerpAPI. Accurate, fast, and works for any geo or language your campaigns target.</p>
+      <div class="feature-name">ValueSERP Rankings</div>
+      <p class="feature-desc">Fetches live Google search positions using ValueSERP. 100 results in a single paginated run — accurate, fast, and credit-efficient.</p>
       <span class="feature-tag">Live Data</span>
     </div>
     <div class="feature-card fade-up">
@@ -792,11 +792,11 @@
         <div class="step-num">02</div>
         <div class="step-content">
           <div class="step-title">Configure Credentials</div>
-          <p class="step-desc">Add your SerpAPI key and Google Sheets credentials to the config section.</p>
-          <div class="code-block"><span class="comment"># In seo_rank_tracker.py</span>
-SERPAPI_KEY = <span class="str">"your_serpapi_key_here"</span>
-SHEET_ID    = <span class="str">"your_google_sheet_id"</span>
-CREDS_FILE  = <span class="str">"credentials.json"</span></div>
+          <p class="step-desc">Add your ValueSERP key and Google Sheets credentials to the config section.</p>
+          <div class="code-block"><span class="comment"># In seo_rank_tracker_valueserp.py</span>
+VALUESERP_API_KEY = <span class="str">"your_valueserp_key_here"</span>
+SPREADSHEET_NAME  = <span class="str">"Your Google Sheet Name"</span>
+CREDS_FILE        = <span class="str">"credentials.json"</span></div>
         </div>
       </div>
       <div class="step fade-up">
@@ -813,7 +813,7 @@ CREDS_FILE  = <span class="str">"credentials.json"</span></div>
         <div class="step-content">
           <div class="step-title">Run the Tracker</div>
           <p class="step-desc">Execute the script and watch rankings flow into your Sheet in real time.</p>
-          <div class="code-block"><span class="kw">python3</span> seo_rank_tracker.py
+          <div class="code-block"><span class="kw">python3</span> seo_rank_tracker_valueserp.py
 
 <span class="comment"># To resume an interrupted run:</span>
 <span class="comment"># Just run the same command — checkpoint is auto-detected</span></div>
@@ -828,7 +828,7 @@ CREDS_FILE  = <span class="str">"credentials.json"</span></div>
   <div class="footer-logo">UPLERS / SEO-RANK-TRACKER</div>
   <div class="footer-meta">
     <span>Python 3</span>
-    <span>SerpAPI</span>
+    <span>ValueSERP</span>
     <span>Google Sheets API</span>
     <span>MIT License</span>
   </div>

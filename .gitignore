@@ -1,0 +1,4 @@
+credentials.json
+debug_responses/
+__pycache__/
+*.pyc

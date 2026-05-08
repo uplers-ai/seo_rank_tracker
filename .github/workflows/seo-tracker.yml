@@ -1,0 +1,61 @@
+name: Weekly SEO Rank Check
+
+on:
+  schedule:
+    # Runs every Sunday at 6:00 PM UTC (11:30 PM IST)
+    # Script takes ~6-7 hrs, data is ready in Google Sheet by ~6 AM IST Monday
+    - cron: '0 18 * * 0'
+  workflow_dispatch:  # Allows manual trigger from GitHub UI
+
+jobs:
+  rank-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    permissions:
+      contents: write  # needed to commit progress file back to repo
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Restore progress file (resume support)
+        run: |
+          if [ -f rank_check_progress.json ]; then
+            echo "Found saved progress file — will resume from last checkpoint."
+          else
+            echo "No progress file found — starting fresh."
+          fi
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install gspread google-auth requests tqdm
+
+      - name: Run SEO Rank Tracker
+        env:
+          VALUESERP_API_KEY: ${{ secrets.VALUESERP_API_KEY }}
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+          CI: true
+        run: python seo_rank_tracker_valueserp.py
+
+      - name: Commit progress file (if run was interrupted or completed)
+        if: always()  # runs even if the step above timed out or failed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if [ -f rank_check_progress.json ]; then
+            git add rank_check_progress.json
+            git diff --cached --quiet || git commit -m "chore: save rank check progress [skip ci]"
+            git push
+          else
+            # Completed successfully — remove stale progress file if it exists in git
+            if git ls-files --error-unmatch rank_check_progress.json 2>/dev/null; then
+              git rm rank_check_progress.json
+              git commit -m "chore: remove completed rank check progress [skip ci]"
+              git push
+            fi
+          fi
