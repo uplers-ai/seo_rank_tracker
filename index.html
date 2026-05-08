@@ -123,7 +123,7 @@
   .status-pill {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 10px;
     font-size: 10px;
     color: var(--green);
     letter-spacing: 0.1em;
@@ -140,6 +140,124 @@
   @keyframes blink {
     0%, 100% { opacity: 1; }
     50% { opacity: 0; }
+  }
+
+  .workflow-badge-link {
+    display: flex;
+    align-items: center;
+    text-decoration: none;
+    border: 1px solid var(--border);
+    padding: 3px 8px;
+    gap: 7px;
+    transition: border-color 0.2s, background 0.2s;
+  }
+
+  .workflow-badge-link:hover {
+    border-color: var(--green);
+    background: var(--green-muted);
+  }
+
+  .workflow-badge-link img {
+    height: 16px;
+    display: block;
+  }
+
+  .workflow-badge-label {
+    font-size: 9px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+
+  /* ── PIPELINE STATUS SECTION ── */
+  .pipeline-section {
+    padding: 3rem 2rem;
+    background: var(--bg);
+    border-top: 1px solid var(--border-dim);
+    border-bottom: 1px solid var(--border-dim);
+  }
+
+  .pipeline-inner {
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  .pipeline-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+
+  .pipeline-title {
+    font-size: 10px;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+
+  .pipeline-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    background: var(--border-dim);
+    border: 1px solid var(--border-dim);
+  }
+
+  .pipeline-card {
+    background: var(--bg2);
+    padding: 1.5rem 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .pipeline-card-label {
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+
+  .pipeline-card-value {
+    font-size: 13px;
+    color: #fff;
+    letter-spacing: 0.05em;
+  }
+
+  .pipeline-card-value.green { color: var(--green); }
+  .pipeline-card-value.amber { color: var(--amber); }
+
+  .pipeline-badge-card {
+    background: var(--bg2);
+    padding: 1.5rem 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .pipeline-badge-card a {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    text-decoration: none;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--green);
+    transition: opacity 0.2s;
+  }
+
+  .pipeline-badge-card a:hover { opacity: 0.7; }
+
+  .pipeline-badge-card a img {
+    height: 20px;
+  }
+
+  @media (max-width: 640px) {
+    .pipeline-grid { grid-template-columns: 1fr; }
   }
 
   /* ── HERO ── */
@@ -644,11 +762,18 @@
   <ul class="nav-links">
     <li><a href="#features">Features</a></li>
     <li><a href="#stats">Stats</a></li>
+    <li><a href="#status">Pipeline</a></li>
     <li><a href="#setup">Setup</a></li>
   </ul>
   <div class="status-pill">
     <div class="status-dot"></div>
     SYSTEM ACTIVE
+    <a href="https://github.com/uplers-ai/seo_rank_tracker/actions/workflows/seo-tracker.yml"
+       target="_blank" rel="noopener" class="workflow-badge-link" title="View latest workflow run">
+      <img src="https://github.com/uplers-ai/seo_rank_tracker/actions/workflows/seo-tracker.yml/badge.svg"
+           alt="Workflow Status">
+      <span class="workflow-badge-label">CI</span>
+    </a>
   </div>
 </header>
 
@@ -734,6 +859,41 @@
       <div class="stat-value"><span class="counter" data-target="100">0</span><span class="stat-suffix">%</span></div>
       <div class="stat-label">Sheet Sync Accuracy</div>
       <div class="stat-bar"><div class="stat-bar-fill" data-width="100"></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ── PIPELINE STATUS ── -->
+<section class="pipeline-section" id="status">
+  <div class="pipeline-inner">
+    <div class="pipeline-header">
+      <div class="pipeline-title">// Automation Pipeline</div>
+      <a href="https://github.com/uplers-ai/seo_rank_tracker/actions/workflows/seo-tracker.yml"
+         target="_blank" rel="noopener"
+         style="font-size:10px;letter-spacing:0.15em;text-transform:uppercase;color:var(--text-dim);text-decoration:none;">
+        View all runs →
+      </a>
+    </div>
+    <div class="pipeline-grid">
+      <div class="pipeline-card">
+        <div class="pipeline-card-label">Schedule</div>
+        <div class="pipeline-card-value">Every Sunday</div>
+        <div style="font-size:11px;color:var(--text-dim);margin-top:2px;">11:30 PM IST → data ready by 6 AM Mon</div>
+      </div>
+      <div class="pipeline-card">
+        <div class="pipeline-card-label">Runtime</div>
+        <div class="pipeline-card-value amber">~6–7 hours</div>
+        <div style="font-size:11px;color:var(--text-dim);margin-top:2px;">700+ keywords via ValueSERP</div>
+      </div>
+      <div class="pipeline-badge-card">
+        <div class="pipeline-card-label">Last Run Status</div>
+        <a href="https://github.com/uplers-ai/seo_rank_tracker/actions/workflows/seo-tracker.yml"
+           target="_blank" rel="noopener">
+          <img src="https://github.com/uplers-ai/seo_rank_tracker/actions/workflows/seo-tracker.yml/badge.svg"
+               alt="Workflow Status">
+          <span style="font-size:10px;color:var(--text-dim);">View on GitHub ↗</span>
+        </a>
+      </div>
     </div>
   </div>
 </section>
