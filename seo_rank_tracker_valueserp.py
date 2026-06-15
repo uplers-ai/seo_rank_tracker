@@ -74,7 +74,7 @@ def retry_sheet_call(func, *args, max_retries=5, base_delay=5, **kwargs):
 CONFIG = {
     # ValueSERP API Key — get yours at https://app.valueserp.com/signup
     # Reads from env variable if set, otherwise falls back to hardcoded key
-    "VALUESERP_API_KEY": os.environ.get("VALUESERP_API_KEY", "C2B2149BF20045DF961237E65097094B"),
+    "VALUESERP_API_KEY": os.environ.get("VALUESERP_API_KEY", "FB89AFA39CCB4098871DCD11B3536F36"),
 
     # Google Sheet
     "SPREADSHEET_NAME": "SEO Master Dashboard (2026) | Uplers",
