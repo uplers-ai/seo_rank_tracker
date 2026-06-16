@@ -519,9 +519,15 @@ def run():
     results = {}
     new_col_index = CONFIG["FIRST_RANK_COL"]
 
-    if progress and progress.get("date_label") == date_label:
-        print(f"\n🔄 Found saved progress from {progress['timestamp']}")
-        print(f"   Last row: {progress['last_completed_row']}")
+    # A progress file only exists when a previous run was interrupted before
+    # completion (it is cleared on successful finish). Resume it regardless of
+    # the calendar date: a full pass can take >6h and cross midnight (UTC), so
+    # gating resume on today's date would discard the checkpoint and restart
+    # from scratch every time a run rolls over to the next day.
+    if progress:
+        saved_label = progress.get("date_label", date_label)
+        print(f"\n🔄 Found saved progress from {progress.get('timestamp')}")
+        print(f"   Date label: {saved_label} | Last row: {progress.get('last_completed_row')}")
 
         if os.environ.get("CI"):
             resume_input = "y"
@@ -532,13 +538,13 @@ def run():
         if resume_input == "y":
             resuming = True
             results = progress.get("results", {})
+            # Keep writing under the ORIGINAL run's date/column so a pass that
+            # spans midnight finishes in the column it started in, not a new one.
+            date_label = saved_label
             print("   ✅ Resuming...\n")
         else:
             clear_progress()
             print("   🗑️ Progress cleared. Starting fresh.\n")
-    elif progress:
-        print(f"\n⚠️ Found old progress from {progress.get('date_label', 'unknown')} — clearing it.")
-        clear_progress()
 
     # Connect to Google Sheet
     worksheet = connect_to_sheet()
