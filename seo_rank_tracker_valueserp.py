@@ -520,11 +520,21 @@ def run():
     new_col_index = CONFIG["FIRST_RANK_COL"]
 
     # A progress file only exists when a previous run was interrupted before
-    # completion (it is cleared on successful finish). Resume it regardless of
-    # the calendar date: a full pass can take >6h and cross midnight (UTC), so
-    # gating resume on today's date would discard the checkpoint and restart
-    # from scratch every time a run rolls over to the next day.
+    # completion (it is cleared on successful finish). Resume it across a UTC
+    # midnight rollover (a full pass can take >6h) — BUT only when the checkpoint
+    # is recent. A stale leftover (e.g. last week's run that died in the retry
+    # pass) must NOT hijack a fresh scheduled run, or that week never gets its
+    # own column. So: resume if < RESUME_MAX_AGE_DAYS old, else discard + start fresh.
+    RESUME_MAX_AGE_DAYS = 2
+    progress_is_fresh = False
     if progress:
+        try:
+            age_days = (datetime.now() - datetime.fromisoformat(progress["timestamp"])).total_seconds() / 86400
+            progress_is_fresh = age_days <= RESUME_MAX_AGE_DAYS
+        except (KeyError, ValueError, TypeError):
+            progress_is_fresh = False  # unparseable timestamp → treat as stale
+
+    if progress and progress_is_fresh:
         saved_label = progress.get("date_label", date_label)
         print(f"\n🔄 Found saved progress from {progress.get('timestamp')}")
         print(f"   Date label: {saved_label} | Last row: {progress.get('last_completed_row')}")
@@ -545,6 +555,13 @@ def run():
         else:
             clear_progress()
             print("   🗑️ Progress cleared. Starting fresh.\n")
+    elif progress:
+        # Stale leftover checkpoint (older than RESUME_MAX_AGE_DAYS) — e.g. a
+        # prior week's run that never cleared its progress. Discard it so this
+        # run starts fresh and creates its own dated column.
+        print(f"\n🗑️ Found stale progress from {progress.get('timestamp')} "
+              f"(> {RESUME_MAX_AGE_DAYS}d old) — discarding and starting fresh for {date_label}.")
+        clear_progress()
 
     # Connect to Google Sheet
     worksheet = connect_to_sheet()
