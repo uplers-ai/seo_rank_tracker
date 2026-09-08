@@ -73,6 +73,7 @@ jobs:
           VALUESERP_API_KEY: ${{ secrets.VALUESERP_API_KEY }}
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
           CI: true
+          PYTHONUNBUFFERED: "1"  # flush per-keyword output so live Actions logs are readable
         run: python seo_rank_tracker_valueserp.py
 
       - name: Commit progress file (if run was interrupted or completed)
