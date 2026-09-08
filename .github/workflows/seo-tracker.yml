@@ -83,6 +83,8 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          # main may have moved while this (multi-hour) job ran; rebase so the push is fast-forward.
+          git pull --rebase --autostash origin main || true
           if [ -f rank_check_progress.json ]; then
             git add rank_check_progress.json
             git diff --cached --quiet || git commit -m "chore: save rank check progress [skip ci]"
