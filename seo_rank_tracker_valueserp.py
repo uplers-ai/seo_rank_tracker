@@ -16,7 +16,7 @@
    ✅ Sequential API calls (safe, respects rate limits)
    ✅ 100 results in a single request (no pagination!)
    ✅ Progress bar and live status
-   ✅ Retry pass for missed keywords
+   ✅ Retry pass for keywords that hit API errors (checkpointed)
 ============================================================
 
  SETUP (one-time):
@@ -105,8 +105,15 @@ CONFIG = {
     "DELAY_BETWEEN_PAGES": 0.5,     # Seconds between paginated page requests
 
     # Retry settings
-    "API_RETRIES": 3,           # Number of retries on transient failures
-    "RETRY_DELAY": 2.0,         # Seconds between retries (doubles each time)
+    "API_RETRIES": 5,           # Attempts per page request on transient failures
+    "RETRY_DELAY": 5.0,         # Seconds before first retry (doubles each time, capped)
+    "RETRY_DELAY_MAX": 60.0,    # Cap on the backoff wait
+    "REQUEST_TIMEOUT": 60,      # Seconds to wait for a ValueSERP response
+
+    # Final retry pass — re-check ERROR keywords (API failures) after the main pass.
+    # "-" (not in top 100) keywords cost ~10 credits each to re-check and almost
+    # never change, so they are skipped unless this is True.
+    "RETRY_PASS_INCLUDE_NOT_FOUND": False,
 
     # Resume file
     "RESUME_FILE": "rank_check_progress.json",
@@ -225,23 +232,51 @@ def save_debug_response(keyword, data):
         json.dump(data, f, indent=2)
 
 
+# ValueSERP error messages that will never succeed on retry — fail fast on these.
+NON_RETRYABLE_MARKERS = (
+    "credits",          # "You have used all of your Top Up credits..."
+    "api_key",          # bad / missing key
+    "api key",
+    "unauthorized",
+    "invalid",
+)
+
+
+def is_retryable_api_error(message):
+    """
+    Decide whether a failed ValueSERP response is worth retrying.
+    Transient failures look like "unable to fulfil your request at this time,
+    please retry ... (G)" or rate-limit messages. Billing/auth errors are not.
+    """
+    m = (message or "").lower()
+    return not any(marker in m for marker in NON_RETRYABLE_MARKERS)
+
+
+def backoff_wait(attempt, retry_delay):
+    return min(retry_delay * (2 ** attempt), CONFIG.get("RETRY_DELAY_MAX", 60.0))
+
+
 def fetch_serp_page(params, max_retries, retry_delay):
     """
     Fetch a single SERP page from ValueSERP with retry logic.
     Returns: (data dict, error string or None)
     """
+    timeout = CONFIG.get("REQUEST_TIMEOUT", 60)
+    last_error = "Unknown error"
+
     for attempt in range(max_retries):
         try:
             response = requests.get(
                 "https://api.valueserp.com/search",
                 params=params,
-                timeout=30,
+                timeout=timeout,
             )
             data = response.json()
         except Exception as e:
+            last_error = str(e)
             if attempt < max_retries - 1:
-                wait = retry_delay * (2 ** attempt)
-                tqdm.write(f"      ⚠️ Request failed (attempt {attempt + 1}): {e} — retrying in {wait:.0f}s")
+                wait = backoff_wait(attempt, retry_delay)
+                tqdm.write(f"      ⚠️ Request failed (attempt {attempt + 1}/{max_retries}): {e} — retrying in {wait:.0f}s")
                 time.sleep(wait)
                 continue
             tqdm.write(f"      ⚠️ Request failed after {max_retries} attempts: {e}")
@@ -250,9 +285,10 @@ def fetch_serp_page(params, max_retries, retry_delay):
         request_info = data.get("request_info", {})
         if not request_info.get("success", False):
             error_msg = request_info.get("message", "Unknown error")
-            if attempt < max_retries - 1 and "rate" in error_msg.lower():
-                wait = retry_delay * (2 ** attempt)
-                tqdm.write(f"      ⚠️ Rate limited — retrying in {wait:.0f}s")
+            last_error = error_msg
+            if attempt < max_retries - 1 and is_retryable_api_error(error_msg):
+                wait = backoff_wait(attempt, retry_delay)
+                tqdm.write(f"      ⚠️ API error (attempt {attempt + 1}/{max_retries}): {error_msg} — retrying in {wait:.0f}s")
                 time.sleep(wait)
                 continue
             tqdm.write(f"      ⚠️ API error: {error_msg}")
@@ -265,6 +301,7 @@ def fetch_serp_page(params, max_retries, retry_delay):
 
         return data, None
 
+    tqdm.write(f"      ⚠️ Giving up after {max_retries} attempts: {last_error}")
     return None, "ERROR"
 
 
@@ -605,11 +642,18 @@ def run():
         resume_results=results,
     )
 
-    # ── Retry: Re-check keywords that were not found ──────────
-    not_found_keys = [k for k, v in results.items() if v == "-" or v == "ERROR"]
+    # ── Retry: Re-check keywords that hit an API error ────────
+    # Checkpointed after every keyword and flushed to the sheet every 10, so a
+    # pass killed by the 6h GitHub Actions limit keeps its work and the next
+    # auto-resume pass only re-checks what is still ERROR.
+    retry_statuses = {"ERROR"}
+    if CONFIG.get("RETRY_PASS_INCLUDE_NOT_FOUND"):
+        retry_statuses.add("-")
+    not_found_keys = [k for k, v in results.items() if v in retry_statuses]
+    retry_credits = 0
     if not_found_keys:
         print("\n" + "─" * 60)
-        print(f"🔁 RETRY: Re-checking {len(not_found_keys)} keywords not found in first pass")
+        print(f"🔁 RETRY: Re-checking {len(not_found_keys)} keywords that errored in first pass")
         print("─" * 60)
 
         retry_keywords = []
@@ -622,9 +666,10 @@ def run():
                     retry_keywords.append((r, keyword))
 
         total_retry = len(retry_keywords)
-        print(f"\n  📋 {total_retry} keywords to retry (~{total_retry} credits)\n")
+        print(f"\n  📋 {total_retry} keywords to retry\n")
 
         retry_batch = []
+        BATCH_SIZE = 10
         for idx, (r, keyword) in enumerate(tqdm(retry_keywords, desc="  retry", unit="kw")):
             tqdm.write(f"    [{idx + 1}/{total_retry}] \"{keyword}\"", end="")
 
@@ -634,18 +679,27 @@ def run():
                 CONFIG["GLOBAL_GL"],
                 CONFIG["GLOBAL_HL"],
             )
+            retry_credits += 1
 
             row_key = str(r)
-            if isinstance(rank, int):
+            if rank != "ERROR":
+                # Overwrite the ERROR (or "-") cell with the real outcome.
                 cell_ref = gspread.utils.rowcol_to_a1(r + 1, new_col_index)
                 retry_batch.append({"range": cell_ref, "values": [[rank]]})
                 results[row_key] = rank
+
+            if isinstance(rank, int):
                 tqdm.write(f"  → Rank {rank} ✅  ({rank_url})")
             elif rank == "-":
-                tqdm.write(f"  → Still not in top {CONFIG['RESULTS_DEPTH']}")
+                tqdm.write(f"  → Not in top {CONFIG['RESULTS_DEPTH']}")
             else:
-                tqdm.write(f"  → {rank}")
+                tqdm.write(f"  → {rank} (still failing, will be retried on next pass)")
 
+            if len(retry_batch) >= BATCH_SIZE:
+                retry_sheet_call(worksheet.batch_update, retry_batch, value_input_option="RAW")
+                retry_batch = []
+
+            save_progress(date_label, "retry", r, results)
             time.sleep(CONFIG["DELAY_BETWEEN_KEYWORDS"])
 
         # Flush retry batch
@@ -658,8 +712,8 @@ def run():
     not_found = sum(1 for v in results.values() if v == "-")
     errors = sum(1 for v in results.values() if v == "ERROR")
 
-    # Estimate credits used (1 per keyword + retries)
-    credits_used = total_checked + len(not_found_keys) if not_found_keys else total_checked
+    # Rough estimate (1 credit per page request; not-found keywords use up to 10)
+    credits_used = total_checked + retry_credits
 
     print("\n" + "=" * 60)
     print("  ✅ RANK CHECK COMPLETE!")
