@@ -4,10 +4,9 @@ on:
   schedule:
     # PRIMARY weekly run — Sunday 18:00 UTC (11:30 PM IST). Starts a fresh snapshot.
     - cron: '0 18 * * 0'
-    # AUTO-RESUME passes — Monday 01:00 / 09:00 / 17:00 UTC.
-    # Each one finishes an unfinished run from the primary; if there's no
-    # checkpoint left to resume, it exits immediately (see the "gate" step), so
-    # it never starts a spurious fresh run or creates a duplicate column.
+    # AUTO-RESUME passes — Monday 01:00 / 09:00 / 17:00 UTC. Safety net only:
+    # a pass that stops with work left now re-dispatches itself (see "chain").
+    # If there's no checkpoint to resume, these exit immediately (see "gate").
     - cron: '0 1 * * 1'
     - cron: '0 9 * * 1'
     - cron: '0 17 * * 1'
@@ -24,11 +23,18 @@ jobs:
     timeout-minutes: 360
 
     permissions:
-      contents: write  # needed to commit progress file back to repo
+      contents: write  # commit progress file back to repo
+      actions: write   # re-dispatch this workflow when a pass leaves work unfinished
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          # Always check out the CURRENT tip of main, not the SHA from when this
+          # run was queued. Runs wait on each other (concurrency), so the SHA at
+          # queue time can predate the previous pass's checkpoint commit — that
+          # made a pass redo 181 keywords on 2026-09-14.
+          ref: main
 
       - name: Decide whether to run (gate)
         id: gate
@@ -56,6 +62,12 @@ jobs:
             fi
             echo "proceed=true" >> "$GITHUB_OUTPUT"
           fi
+          # Remember the checkpoint we started from, to detect progress later.
+          if [ -f rank_check_progress.json ]; then
+            echo "before=$(md5sum < rank_check_progress.json)" >> "$GITHUB_OUTPUT"
+          else
+            echo "before=none" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Set up Python
         if: steps.gate.outputs.proceed == 'true'
@@ -77,23 +89,58 @@ jobs:
         run: python seo_rank_tracker_valueserp.py
 
       - name: Commit progress file (if run was interrupted or completed)
+        id: commit
         # always() so it runs even if the tracker step timed out, but skip it
         # entirely when the gate decided not to run.
         if: ${{ always() && steps.gate.outputs.proceed == 'true' }}
+        env:
+          BEFORE: ${{ steps.gate.outputs.before }}
         run: |
+          set -e
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          # main may have moved while this (multi-hour) job ran; rebase so the push is fast-forward.
-          git pull --rebase --autostash origin main || true
+
+          # main may have moved while this (multi-hour) job ran. Our checkpoint
+          # is always the newest (runs are serialised and start from main's
+          # tip), so: park it, move to the current tip, put it back. Never
+          # rebase/merge the JSON — that produced conflict markers on 2026-09-15.
           if [ -f rank_check_progress.json ]; then
-            git add rank_check_progress.json
-            git diff --cached --quiet || git commit -m "chore: save rank check progress [skip ci]"
-            git push
-          else
-            # Completed successfully — remove stale progress file if it exists in git
-            if git ls-files --error-unmatch rank_check_progress.json 2>/dev/null; then
-              git rm rank_check_progress.json
-              git commit -m "chore: remove completed rank check progress [skip ci]"
-              git push
-            fi
+            cp rank_check_progress.json /tmp/progress.json
+            python -c 'import json,sys; json.load(open("/tmp/progress.json"))' \
+              || { echo "::error::checkpoint is not valid JSON — not committing it"; exit 1; }
           fi
+          git fetch origin main
+          git reset -q --hard origin/main
+
+          if [ -f /tmp/progress.json ]; then
+            cp /tmp/progress.json rank_check_progress.json
+            git add rank_check_progress.json
+            if git diff --cached --quiet; then
+              echo "Checkpoint unchanged."
+            else
+              git commit -m "chore: save rank check progress [skip ci]"
+              git push origin HEAD:main
+            fi
+            if [ "$BEFORE" != "$(md5sum < rank_check_progress.json)" ]; then
+              echo "unfinished=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "::warning::No progress was made this pass — not re-dispatching."
+              echo "unfinished=false" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            # Completed — remove the checkpoint if it is still tracked.
+            if git ls-files --error-unmatch rank_check_progress.json 2>/dev/null; then
+              git rm -q rank_check_progress.json
+              git commit -m "chore: remove completed rank check progress [skip ci]"
+              git push origin HEAD:main
+            fi
+            echo "unfinished=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Re-dispatch to finish the remaining keywords (chain)
+        # Only when this pass made progress but did not finish, so a broken
+        # run can never loop. Concurrency serialises it behind this job.
+        if: ${{ always() && steps.commit.outputs.unfinished == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run seo-tracker.yml --ref main

@@ -13,7 +13,7 @@
  Features:
    ✅ Google Sheets read/write via API
    ✅ Resume support (picks up where it left off if interrupted)
-   ✅ Sequential API calls (safe, respects rate limits)
+   ✅ Parallel API calls (CONFIG CONCURRENCY, well under the 250/min limit)
    ✅ 100 results in a single request (no pagination!)
    ✅ Progress bar and live status
    ✅ Retry pass for keywords that hit API errors (checkpointed)
@@ -39,6 +39,7 @@ import json
 import os
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from urllib.parse import urlparse
 
@@ -102,6 +103,10 @@ CONFIG = {
 
     # Rate limiting
     "DELAY_BETWEEN_KEYWORDS": 1.0,  # Seconds between keyword searches
+    # Keywords checked in parallel. ValueSERP allows 250 req/min; at ~16s per
+    # request 4 workers use ~15 req/min. Sequential runs (1) no longer finish a
+    # 739-keyword pass inside GitHub Actions' 6h job limit.
+    "CONCURRENCY": 4,
     "DELAY_BETWEEN_PAGES": 0.5,     # Seconds between paginated page requests
 
     # Retry settings
@@ -275,9 +280,12 @@ def fetch_serp_page(params, max_retries, retry_delay):
         except Exception as e:
             last_error = str(e)
             if attempt < max_retries - 1:
-                wait = backoff_wait(attempt, retry_delay)
+                # A read timeout already cost us `timeout` seconds; retry at once.
+                is_timeout = isinstance(e, requests.exceptions.Timeout)
+                wait = 0 if is_timeout else backoff_wait(attempt, retry_delay)
                 tqdm.write(f"      ⚠️ Request failed (attempt {attempt + 1}/{max_retries}): {e} — retrying in {wait:.0f}s")
-                time.sleep(wait)
+                if wait:
+                    time.sleep(wait)
                 continue
             tqdm.write(f"      ⚠️ Request failed after {max_retries} attempts: {e}")
             return None, "ERROR"
@@ -414,12 +422,21 @@ def get_rank_from_valueserp(keyword, location, gl, hl):
 
 
 def load_progress():
-    """Load saved progress from resume file."""
+    """Load saved progress from resume file. Exits loudly if the file is corrupt."""
     resume_file = CONFIG["RESUME_FILE"]
-    if os.path.exists(resume_file):
-        with open(resume_file, "r") as f:
-            return json.load(f)
-    return None
+    if not os.path.exists(resume_file):
+        return None
+    with open(resume_file, "r") as f:
+        raw = f.read()
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as e:
+        print(f"\n❌ {resume_file} is not valid JSON ({e}).")
+        if "<<<<<<<" in raw:
+            print("   It contains git merge-conflict markers. Restore it from the last good commit,")
+            print("   or rebuild it from the sheet, before re-running.")
+        print("   Refusing to start: a fresh run here would create a duplicate column.")
+        sys.exit(2)
 
 
 def save_progress(date_label, section, row_index, results):
@@ -431,8 +448,12 @@ def save_progress(date_label, section, row_index, results):
         "results": results,
         "timestamp": datetime.now().isoformat(),
     }
-    with open(CONFIG["RESUME_FILE"], "w") as f:
+    # Write to a temp file and rename so a kill mid-write never leaves a
+    # truncated checkpoint behind (os.replace is atomic on POSIX).
+    tmp = CONFIG["RESUME_FILE"] + ".tmp"
+    with open(tmp, "w") as f:
         json.dump(progress, f, indent=2)
+    os.replace(tmp, CONFIG["RESUME_FILE"])
 
 
 def clear_progress():
@@ -442,14 +463,77 @@ def clear_progress():
         os.remove(resume_file)
 
 
+def check_keywords(worksheet, items, location, gl, hl, new_col_index, results,
+                   date_label, section_name, desc, write_errors=True):
+    """
+    Check a list of (row_index, keyword) items against ValueSERP, in parallel,
+    and write ranks into the date column.
+
+    Invariant: the checkpoint is only saved right AFTER a sheet flush, so every
+    row recorded as done is really in the sheet. (Saving per keyword while
+    flushing every 10 used to leave up to 9 blank cells whenever a run was
+    killed by the 6h Actions limit.)
+
+    write_errors=False (retry pass) leaves an ERROR cell untouched so the next
+    pass retries it again.
+    """
+    total = len(items)
+    workers = max(1, int(CONFIG.get("CONCURRENCY", 1)))
+    BATCH_SIZE = 10
+    batch_updates = []
+    credits = 0
+
+    def flush():
+        nonlocal batch_updates
+        if batch_updates:
+            retry_sheet_call(worksheet.batch_update, batch_updates, value_input_option="RAW")
+            batch_updates = []
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {
+            pool.submit(get_rank_from_valueserp, keyword, location, gl, hl): (r, keyword)
+            for r, keyword in items
+        }
+        for idx, fut in enumerate(tqdm(as_completed(futures), total=total, desc=f"  {desc}", unit="kw")):
+            r, keyword = futures[fut]
+            try:
+                rank, rank_url = fut.result()
+            except Exception as e:  # never let one keyword kill the run
+                rank, rank_url = "ERROR", ""
+                tqdm.write(f"      ⚠️ Unexpected failure: {e}")
+            credits += 1
+
+            row_key = str(r)
+            if rank != "ERROR" or write_errors:
+                cell_ref = gspread.utils.rowcol_to_a1(r + 1, new_col_index)
+                batch_updates.append({"range": cell_ref, "values": [[rank]]})
+                results[row_key] = rank
+
+            if isinstance(rank, int):
+                tqdm.write(f"    [{idx + 1}/{total}] \"{keyword}\"  → Rank {rank} ✅  ({rank_url})")
+            elif rank == "-":
+                tqdm.write(f"    [{idx + 1}/{total}] \"{keyword}\"  → Not in top {CONFIG['RESULTS_DEPTH']}")
+            else:
+                tqdm.write(f"    [{idx + 1}/{total}] \"{keyword}\"  → ERROR")
+
+            if len(batch_updates) >= BATCH_SIZE:
+                flush()
+                save_progress(date_label, section_name, r, results)
+
+            time.sleep(CONFIG["DELAY_BETWEEN_KEYWORDS"] / workers)
+
+    flush()
+    save_progress(date_label, section_name, items[-1][0] if items else 0, results)
+    return credits
+
+
 def process_section(worksheet, all_data, header_row_idx, data_start_idx, data_end_idx,
                     location, gl, hl, date_label, section_name,
                     new_col_index, resume_results=None):
     """
     Process one section of keywords.
     Writes ranks into the already-inserted date column.
-    Uses batch writes (every 10 keywords) for speed + reliability.
-    Supports resuming from a specific row.
+    Supports resuming: rows already present in resume_results are skipped.
     """
     results = resume_results or {}
     keywords_to_process = []
@@ -476,42 +560,13 @@ def process_section(worksheet, all_data, header_row_idx, data_start_idx, data_en
 
     total = len(keywords_to_process)
     print(f"\n  📋 {section_name}: {total} keywords to process")
-    print(f"  💰 This will use ~{total} ValueSERP credits\n")
+    print(f"  💰 This will use ~{total} ValueSERP credits (up to 10 per keyword not in top 100)")
+    print(f"  ⚡ {CONFIG.get('CONCURRENCY', 1)} keywords in parallel\n")
 
-    batch_updates = []  # Collect cells to write in batches
-    BATCH_SIZE = 10
-
-    for idx, (r, keyword) in enumerate(tqdm(keywords_to_process, desc=f"  {section_name}", unit="kw")):
-        tqdm.write(f"    [{idx + 1}/{total}] \"{keyword}\"", end="")
-
-        rank, rank_url = get_rank_from_valueserp(keyword, location, gl, hl)
-
-        # Queue the cell update
-        cell_ref = gspread.utils.rowcol_to_a1(r + 1, new_col_index)
-        batch_updates.append({"range": cell_ref, "values": [[rank]]})
-
-        row_key = str(r)
-        results[row_key] = rank
-
-        if isinstance(rank, int):
-            tqdm.write(f"  → Rank {rank} ✅  ({rank_url})")
-        elif rank == "-":
-            tqdm.write(f"  → Not in top {CONFIG['RESULTS_DEPTH']}")
-        else:
-            tqdm.write(f"  → {rank}")
-
-        # Flush batch every BATCH_SIZE keywords
-        if len(batch_updates) >= BATCH_SIZE:
-            retry_sheet_call(worksheet.batch_update, batch_updates, value_input_option="RAW")
-            batch_updates = []
-
-        save_progress(date_label, section_name, r, results)
-        time.sleep(CONFIG["DELAY_BETWEEN_KEYWORDS"])
-
-    # Flush any remaining batch updates
-    if batch_updates:
-        retry_sheet_call(worksheet.batch_update, batch_updates, value_input_option="RAW")
-
+    check_keywords(
+        worksheet, keywords_to_process, location, gl, hl, new_col_index, results,
+        date_label, section_name, desc=section_name, write_errors=True,
+    )
     return results
 
 
@@ -562,7 +617,7 @@ def run():
     # is recent. A stale leftover (e.g. last week's run that died in the retry
     # pass) must NOT hijack a fresh scheduled run, or that week never gets its
     # own column. So: resume if < RESUME_MAX_AGE_DAYS old, else discard + start fresh.
-    RESUME_MAX_AGE_DAYS = 2
+    RESUME_MAX_AGE_DAYS = 5  # a week's column may take several passes over 2-3 days
     progress_is_fresh = False
     if progress:
         try:
@@ -643,9 +698,9 @@ def run():
     )
 
     # ── Retry: Re-check keywords that hit an API error ────────
-    # Checkpointed after every keyword and flushed to the sheet every 10, so a
-    # pass killed by the 6h GitHub Actions limit keeps its work and the next
-    # auto-resume pass only re-checks what is still ERROR.
+    # Checkpointed with the sheet flush, so a pass killed by the 6h GitHub
+    # Actions limit keeps its work and the next pass only re-checks what is
+    # still ERROR.
     retry_statuses = {"ERROR"}
     if CONFIG.get("RETRY_PASS_INCLUDE_NOT_FOUND"):
         retry_statuses.add("-")
@@ -665,46 +720,12 @@ def run():
                 if keyword:
                     retry_keywords.append((r, keyword))
 
-        total_retry = len(retry_keywords)
-        print(f"\n  📋 {total_retry} keywords to retry\n")
-
-        retry_batch = []
-        BATCH_SIZE = 10
-        for idx, (r, keyword) in enumerate(tqdm(retry_keywords, desc="  retry", unit="kw")):
-            tqdm.write(f"    [{idx + 1}/{total_retry}] \"{keyword}\"", end="")
-
-            rank, rank_url = get_rank_from_valueserp(
-                keyword,
-                CONFIG["GLOBAL_LOCATION"],
-                CONFIG["GLOBAL_GL"],
-                CONFIG["GLOBAL_HL"],
-            )
-            retry_credits += 1
-
-            row_key = str(r)
-            if rank != "ERROR":
-                # Overwrite the ERROR (or "-") cell with the real outcome.
-                cell_ref = gspread.utils.rowcol_to_a1(r + 1, new_col_index)
-                retry_batch.append({"range": cell_ref, "values": [[rank]]})
-                results[row_key] = rank
-
-            if isinstance(rank, int):
-                tqdm.write(f"  → Rank {rank} ✅  ({rank_url})")
-            elif rank == "-":
-                tqdm.write(f"  → Not in top {CONFIG['RESULTS_DEPTH']}")
-            else:
-                tqdm.write(f"  → {rank} (still failing, will be retried on next pass)")
-
-            if len(retry_batch) >= BATCH_SIZE:
-                retry_sheet_call(worksheet.batch_update, retry_batch, value_input_option="RAW")
-                retry_batch = []
-
-            save_progress(date_label, "retry", r, results)
-            time.sleep(CONFIG["DELAY_BETWEEN_KEYWORDS"])
-
-        # Flush retry batch
-        if retry_batch:
-            retry_sheet_call(worksheet.batch_update, retry_batch, value_input_option="RAW")
+        print(f"\n  📋 {len(retry_keywords)} keywords to retry\n")
+        retry_credits = check_keywords(
+            worksheet, retry_keywords,
+            CONFIG["GLOBAL_LOCATION"], CONFIG["GLOBAL_GL"], CONFIG["GLOBAL_HL"],
+            new_col_index, results, date_label, "retry", desc="retry", write_errors=False,
+        )
 
     # ── Summary ───────────────────────────────────────────────
     total_checked = len(results)
