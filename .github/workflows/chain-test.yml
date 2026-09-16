@@ -18,4 +18,5 @@ jobs:
       - if: ${{ inputs.hop == '0' }}
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: gh workflow run chain-test.yml --ref main -f hop=1

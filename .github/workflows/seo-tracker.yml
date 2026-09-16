@@ -10,6 +10,10 @@ on:
     - cron: '0 1 * * 1'
     - cron: '0 9 * * 1'
     - cron: '0 17 * * 1'
+    # Tuesday safety net in case the self re-dispatch ever fails.
+    - cron: '0 1 * * 2'
+    - cron: '0 9 * * 2'
+    - cron: '0 17 * * 2'
   workflow_dispatch:  # manual trigger (resumes if a checkpoint exists, else fresh)
 
 # Never let two runs touch the sheet / checkpoint at the same time.
@@ -143,4 +147,5 @@ jobs:
         if: ${{ always() && steps.commit.outputs.unfinished == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}  # gh cannot always infer the repo from the checkout
         run: gh workflow run seo-tracker.yml --ref main
